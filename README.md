@@ -31,8 +31,6 @@
 curl -sSL https://raw.githubusercontent.com/Behemiron/InstallNovaDayzStore/main/install.sh | sudo bash
 ```
 
-*(Замените плейсхолдеры в URL на имя вашего публичного репозитория, куда вы поместите файл `install.sh`)*.
-
 ---
 
 ## Шаги интерактивной установки:
