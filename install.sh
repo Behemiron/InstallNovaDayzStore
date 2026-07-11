@@ -3,7 +3,7 @@
 #                 NOVADAYZ SHOP - Ubuntu Auto-Installer Script
 # ==============================================================================
 # OS Support: Ubuntu 20.04 / 22.04 / 24.04 (LTS)
-# Runs as: root
+# Runs as: root (will configure and run applications under novadayz system user)
 # ==============================================================================
 
 set -e
@@ -45,10 +45,17 @@ echo -e "\n${YELLOW}>>> Настройка конфигурации проект
 read -p "Введите имя домена (например, novadayz.ru) или оставьте пустым для IP: " DOMAIN
 read -p "Введите ваш Steam Web API Key (можно получить на https://steamcommunity.com/dev/apikey): " STEAM_KEY
 read -p "Введите секретный ключ для мода DayZ (DayZ Server API Key): " DAYZ_KEY
-read -p "Введите репозиторий GitHub в формате 'owner/repo' (например: Behemiron/NovaDayzStore): " GIT_REPO
+read -p "Репозиторий GitHub (по умолчанию Behemiron/NovaDayzStore): " GIT_REPO
+GIT_REPO=${GIT_REPO:-Behemiron/NovaDayzStore}
 
 USE_SSH="true"
 GIT_TOKEN=""
+
+# 3. Create non-privileged system user "novadayz"
+if ! id "novadayz" &>/dev/null; then
+  echo -e "${YELLOW}>>> Создание системного пользователя novadayz...${NC}"
+  useradd -r -m -U -d /home/novadayz -s /bin/bash novadayz
+fi
 
 if [ -n "$GIT_REPO" ]; then
   read -p "Использовать SSH Deploy Key для авторизации в GitHub? (Рекомендуется) (Y/n): " auth_choice
@@ -57,18 +64,19 @@ if [ -n "$GIT_REPO" ]; then
     read -p "Введите ваш GitHub Personal Access Token (PAT): " GIT_TOKEN
   else
     USE_SSH="true"
-    # Ensure root SSH directory exists
-    mkdir -p /root/.ssh
-    chmod 700 /root/.ssh
+    # Ensure novadayz SSH directory exists
+    mkdir -p /home/novadayz/.ssh
+    chmod 700 /home/novadayz/.ssh
     
     # Generate SSH Key if it does not exist
-    SSH_KEY_FILE="/root/.ssh/id_ed25519_novadayz"
+    SSH_KEY_FILE="/home/novadayz/.ssh/id_ed25519_novadayz"
     if [ ! -f "$SSH_KEY_FILE" ]; then
       echo -e "${YELLOW}>>> Генерация SSH Deploy Key...${NC}"
       ssh-keygen -t ed25519 -f "$SSH_KEY_FILE" -N "" -q
       chmod 600 "$SSH_KEY_FILE"
       chmod 644 "${SSH_KEY_FILE}.pub"
     fi
+    chown -R novadayz:novadayz /home/novadayz/.ssh
     
     echo -e "\n${GREEN}==============================================================================${NC}"
     echo -e "${GREEN}  ВАШ SSH DEPLOY KEY (СКОПИРУЙТЕ СТРОКУ НИЖЕ И ДОБАВЬТЕ В НАСТРОЙКИ GITHUB):     ${NC}"
@@ -94,9 +102,14 @@ JWT_REFRESH_SECRET=$(openssl rand -hex 32)
 echo -e "\n${YELLOW}>>> Установка необходимых пакетов...${NC}"
 apt-get update -y
 apt-get upgrade -y
-apt-get install -y curl git build-essential openssl nginx certbot python3-certbot-nginx
+apt-get install -y curl git build-essential openssl nginx certbot python3-certbot-nginx sudo
 
-# 3. Install Node.js 20 LTS
+# Configure sudoers for passwordless Nginx/Certbot reload by novadayz user
+echo -e "${YELLOW}>>> Настройка прав sudo для пользователя novadayz...${NC}"
+echo "novadayz ALL=(ALL) NOPASSWD: /usr/sbin/nginx, /usr/bin/systemctl reload nginx, /usr/bin/certbot" > /etc/sudoers.d/novadayz
+chmod 440 /etc/sudoers.d/novadayz
+
+# 4. Install Node.js 20 LTS
 if ! command -v node &> /dev/null; then
   echo -e "${YELLOW}>>> Установка Node.js 20...${NC}"
   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
@@ -105,13 +118,13 @@ fi
 echo -e "${GREEN}Node.js версия: $(node -v)${NC}"
 echo -e "${GREEN}npm версия: $(npm -v)${NC}"
 
-# 4. Install PM2
+# 5. Install PM2
 if ! command -v pm2 &> /dev/null; then
   echo -e "${YELLOW}>>> Установка PM2...${NC}"
   npm install -y -g pm2
 fi
 
-# 5. Install MySQL Server
+# 6. Install MySQL Server
 if ! command -v mysql &> /dev/null; then
   echo -e "${YELLOW}>>> Установка MySQL Server...${NC}"
   apt-get install -y mysql-server
@@ -126,39 +139,25 @@ mysql -e "CREATE USER IF NOT EXISTS 'novadayz'@'localhost' IDENTIFIED BY '${DB_P
 mysql -e "GRANT ALL PRIVILEGES ON novadayz.* TO 'novadayz'@'localhost';"
 mysql -e "FLUSH PRIVILEGES;"
 
-# 6. Setup Directory Structure
+# 7. Setup Directory Structure
 APP_DIR="/var/www/novadayz"
 echo -e "${YELLOW}>>> Подготовка директорий в $APP_DIR...${NC}"
 
-# If running installer inside the source codebase directory, copy local files
-if [ -d "./backend" ] && [ -d "./frontend" ]; then
-  echo -e "Копирование файлов проекта из текущего расположения..."
-  mkdir -p $APP_DIR
-  cp -r ./backend $APP_DIR/
-  cp -r ./frontend $APP_DIR/
-  if [ -f "./package.json" ]; then
-    cp ./package.json $APP_DIR/
-  fi
-  if [ -f "./package-lock.json" ]; then
-    cp ./package-lock.json $APP_DIR/
-  fi
-  if [ -f "./.gitignore" ]; then
-    cp ./.gitignore $APP_DIR/
-  fi
+# Fresh installation - clone from GitHub repo
+echo -e "Клонирование репозитория с GitHub..."
+rm -rf $APP_DIR
+mkdir -p $APP_DIR
+chown novadayz:novadayz $APP_DIR
+
+if [ "$USE_SSH" = "true" ]; then
+  sudo -u novadayz GIT_SSH_COMMAND="ssh -i /home/novadayz/.ssh/id_ed25519_novadayz -o StrictHostKeyChecking=no" git clone git@github.com:${GIT_REPO}.git $APP_DIR
+  cd $APP_DIR
+  sudo -u novadayz git config core.sshCommand "ssh -i /home/novadayz/.ssh/id_ed25519_novadayz -o StrictHostKeyChecking=no"
 else
-  # Fresh installation - clone from GitHub repo
-  echo -e "Клонирование репозитория с GitHub..."
-  rm -rf $APP_DIR
-  if [ "$USE_SSH" = "true" ]; then
-    GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519_novadayz -o StrictHostKeyChecking=no" git clone git@github.com:${GIT_REPO}.git $APP_DIR
-    cd $APP_DIR
-    git config core.sshCommand "ssh -i /root/.ssh/id_ed25519_novadayz -o StrictHostKeyChecking=no"
-  else
-    git clone https://${GIT_TOKEN}@github.com/${GIT_REPO}.git $APP_DIR
-  fi
+  sudo -u novadayz git clone https://${GIT_TOKEN}@github.com/${GIT_REPO}.git $APP_DIR
 fi
 
-# 7. Generate Configuration files
+# 8. Generate Configuration files
 echo -e "${YELLOW}>>> Генерация конфигурационных файлов .env...${NC}"
 
 # Backend config
@@ -189,13 +188,16 @@ DB_PASS=${DB_PASS}
 DB_NAME=novadayz
 CREDSEOF
 
-# 8. Build Backend
+# Set ownership of all files to novadayz user
+chown -R novadayz:novadayz $APP_DIR
+
+# 9. Build Backend
 echo -e "${YELLOW}>>> Сборка бэкенда...${NC}"
 cd $APP_DIR/backend
-npm install --production=false
-npx prisma generate
-npx prisma db push --accept-data-loss
-npm run build
+sudo -u novadayz npm install --production=false
+sudo -u novadayz npx prisma generate
+sudo -u novadayz npx prisma db push --accept-data-loss
+sudo -u novadayz npm run build
 
 # Save default settings values to DB for domain and github
 mysql -u novadayz -p${DB_PASS} novadayz -e "
@@ -206,13 +208,13 @@ INSERT INTO SystemSetting (\`key\`, \`value\`) VALUES
 ('github.repo', '${GIT_REPO}')
 ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`);"
 
-# 9. Build Frontend
+# 10. Build Frontend
 echo -e "${YELLOW}>>> Сборка фронтенда...${NC}"
 cd $APP_DIR/frontend
-npm install
-NEXT_PUBLIC_BACKEND_URL="http://${DOMAIN:-localhost}/api" npm run build
+sudo -u novadayz npm install --production=false
+sudo -u novadayz NEXT_PUBLIC_BACKEND_URL="http://${DOMAIN:-localhost}/api" npm run build
 
-# 10. Configure Nginx Virtual Host
+# 11. Configure Nginx Virtual Host
 echo -e "${YELLOW}>>> Настройка веб-сервера Nginx...${NC}"
 cat > /etc/nginx/sites-available/novadayz << NGINXEOF
 server {
@@ -249,26 +251,32 @@ server {
 }
 NGINXEOF
 
+# Enable Nginx configs and assign ownership to novadayz user
+touch /etc/nginx/sites-available/novadayz
+chown novadayz:novadayz /etc/nginx/sites-available/novadayz
+mkdir -p /etc/nginx/ssl
+chown -R novadayz:novadayz /etc/nginx/ssl
+
 ln -sf /etc/nginx/sites-available/novadayz /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default || true
 nginx -t
 systemctl reload nginx
 
-# 11. Run Services with PM2
+# 12. Run Services with PM2 under novadayz user
 echo -e "${YELLOW}>>> Запуск приложений под PM2...${NC}"
-pm2 delete novadayz-backend 2>/dev/null || true
-pm2 delete novadayz-frontend 2>/dev/null || true
+sudo -u novadayz pm2 delete novadayz-backend 2>/dev/null || true
+sudo -u novadayz pm2 delete novadayz-frontend 2>/dev/null || true
 
 cd $APP_DIR/backend
-pm2 start dist/main.js --name novadayz-backend --env production
+sudo -u novadayz pm2 start dist/main.js --name novadayz-backend --env production
 
 cd $APP_DIR/frontend
-pm2 start npm --name novadayz-frontend -- start -- -p 3000
+sudo -u novadayz pm2 start npm --name novadayz-frontend -- start -- -p 3000
 
-pm2 save
-pm2 startup systemd -u root --hp /root || true
+sudo -u novadayz pm2 save
+env PATH=$PATH:/usr/bin pm2 startup systemd -u novadayz --hp /home/novadayz || true
 
-# 12. Let's Encrypt SSL automation
+# 13. Let's Encrypt SSL automation
 if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "localhost" ]; then
   echo -e "${YELLOW}>>> Запрос SSL сертификата Let's Encrypt для $DOMAIN...${NC}"
   certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email admin@$DOMAIN --redirect || echo -e "${RED}Предупреждение: Не удалось выпустить SSL. Возможно, домен не направлен на этот IP.${NC}"
