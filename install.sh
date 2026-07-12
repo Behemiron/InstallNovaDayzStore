@@ -43,6 +43,16 @@ fi
 # 2. Interactive user inputs
 echo -e "\n${YELLOW}>>> Настройка конфигурации проекта...${NC}"
 read -p "Введите имя домена (например, novadayz.ru) или оставьте пустым для IP: " DOMAIN
+
+if [ -z "$DOMAIN" ]; then
+  echo -e "${YELLOW}Домен не указан. Автоматическое определение внешнего IP-адреса сервера...${NC}"
+  DOMAIN=$(curl -s --max-time 5 https://api.ipify.org || echo "")
+  if [ -z "$DOMAIN" ]; then
+    DOMAIN="localhost"
+  fi
+  echo -e "${GREEN}Используется IP-адрес: $DOMAIN${NC}"
+fi
+
 read -p "Введите ваш Steam Web API Key (можно получить на https://steamcommunity.com/dev/apikey): " STEAM_KEY
 read -p "Введите секретный ключ для мода DayZ (DayZ Server API Key): " DAYZ_KEY
 read -p "Репозиторий GitHub (по умолчанию Behemiron/NovaDayzStore): " GIT_REPO
@@ -102,7 +112,7 @@ JWT_REFRESH_SECRET=$(openssl rand -hex 32)
 echo -e "\n${YELLOW}>>> Установка необходимых пакетов...${NC}"
 apt-get update -y
 apt-get upgrade -y
-apt-get install -y curl git build-essential openssl nginx certbot python3-certbot-nginx sudo
+apt-get install -y curl git build-essential openssl nginx certbot python3-certbot-nginx sudo redis-server
 
 # Configure sudoers for passwordless Nginx/Certbot reload by novadayz user
 echo -e "${YELLOW}>>> Настройка прав sudo для пользователя novadayz...${NC}"
@@ -123,6 +133,11 @@ if ! command -v pm2 &> /dev/null; then
   echo -e "${YELLOW}>>> Установка PM2...${NC}"
   npm install -y -g pm2
 fi
+
+# Enable and start Redis
+echo -e "${YELLOW}>>> Настройка Redis Server...${NC}"
+systemctl start redis-server
+systemctl enable redis-server
 
 # 6. Install MySQL Server
 if ! command -v mysql &> /dev/null; then
@@ -230,6 +245,9 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_cache_bypass \$http_upgrade;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
     }
 
     location /api/ {
