@@ -43,10 +43,12 @@ fi
 # 2. Interactive user inputs
 echo -e "\n${YELLOW}>>> Настройка конфигурации проекта...${NC}"
 read -p "Введите имя домена (например, novadayz.ru) или оставьте пустым для IP: " DOMAIN
+DOMAIN=$(echo "$DOMAIN" | tr -d '\r')
 
 if [ -z "$DOMAIN" ]; then
   echo -e "${YELLOW}Домен не указан. Автоматическое определение внешнего IP-адреса сервера...${NC}"
   DOMAIN=$(curl -s --max-time 5 https://api.ipify.org || echo "")
+  DOMAIN=$(echo "$DOMAIN" | tr -d '\r')
   if [ -z "$DOMAIN" ]; then
     DOMAIN="localhost"
   fi
@@ -54,8 +56,13 @@ if [ -z "$DOMAIN" ]; then
 fi
 
 read -p "Введите ваш Steam Web API Key (можно получить на https://steamcommunity.com/dev/apikey): " STEAM_KEY
+STEAM_KEY=$(echo "$STEAM_KEY" | tr -d '\r')
+
 read -p "Введите секретный ключ для мода DayZ (DayZ Server API Key): " DAYZ_KEY
+DAYZ_KEY=$(echo "$DAYZ_KEY" | tr -d '\r')
+
 read -p "Репозиторий GitHub (по умолчанию Behemiron/NovaDayzStore): " GIT_REPO
+GIT_REPO=$(echo "$GIT_REPO" | tr -d '\r')
 GIT_REPO=${GIT_REPO:-Behemiron/NovaDayzStore}
 
 USE_SSH="true"
