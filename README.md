@@ -93,7 +93,7 @@ During installation, the script will prompt you for configuration parameters. Be
 After pressing `ENTER`, the installer autonomously handles the rest of the deployment:
 
 1. Installs Node.js 20 LTS, MySQL, Redis, Nginx, Certbot, PM2, and UFW Firewall.
-2. Clones the repository codebase into `/var/www/novadayz`.
+2. Clones the repository codebase into your custom isolated project directory `/var/www/${project_user}` (e.g., `/var/www/yavol_novadayz`).
 3. Auto-generates production `.env` configuration files with random DB passwords and JWT secrets.
 4. Compiles the NestJS backend API (`npm run build`).
 5. Compiles the Next.js frontend web application (`npm run build`).
@@ -105,17 +105,19 @@ After pressing `ENTER`, the installer autonomously handles the rest of the deplo
 
 ## Server Management Commands
 
+Replace `<project_user>` (e.g., `yavol_novadayz`) and `<project_name>` (e.g., `yavol`) with the custom project identifier chosen during setup:
+
 ```bash
 # View active application process status
-sudo -u novadayz pm2 status
+sudo -u <project_user> pm2 status
 
 # View live application logs
-sudo -u novadayz pm2 logs novadayz-backend
-sudo -u novadayz pm2 logs novadayz-frontend
+sudo -u <project_user> pm2 logs <project_name>-backend
+sudo -u <project_user> pm2 logs <project_name>-frontend
 
 # Restart application services
-sudo -u novadayz pm2 restart novadayz-backend
-sudo -u novadayz pm2 restart novadayz-frontend
+sudo -u <project_user> pm2 restart <project_name>-backend
+sudo -u <project_user> pm2 restart <project_name>-frontend
 
 # Check active UFW firewall rules & blocked ports
 sudo ufw status verbose
