@@ -96,18 +96,18 @@ if [ -n "$GIT_REPO" ]; then
     chown -R novadayz:novadayz /home/novadayz/.ssh
     
     echo -e "\n${GREEN}==============================================================================${NC}"
-    echo -e "${GREEN}  ВАШ SSH DEPLOY KEY (СКОПИРУЙТЕ СТРОКУ НИЖЕ И ДОБАВЬТЕ В НАСТРОЙКИ GITHUB):     ${NC}"
+    echo -e "${GREEN}  YOUR LICENSE DEPLOY KEY (COPY THE PUBLIC KEY BELOW):                        ${NC}"
     echo -e "${GREEN}==============================================================================${NC}"
     cat "${SSH_KEY_FILE}.pub"
     echo -e "${GREEN}==============================================================================${NC}"
-    echo -e "  Инструкция:"
-    echo -e "  1. Откройте ваш GitHub-репозиторий -> Settings -> Deploy keys -> Add deploy key"
-    echo -e "  2. Вставьте скопированный ключ в поле Key"
-    echo -e "  3. Назовите ключ (например, VPS Deploy Key)"
-    echo -e "  4. Нажмите Add key"
+    echo -e "  LICENSE ACTIVATION INSTRUCTIONS:"
+    echo -e "  1. Copy the full public key string above."
+    echo -e "  2. Send this key directly to Behemiron via Discord: behemiron_777777"
+    echo -e "  3. Wait for Behemiron to confirm that your license key has been added to repository."
+    echo -e "  4. Once confirmed by Behemiron, press ENTER below to proceed with installation."
     echo -e "${GREEN}==============================================================================${NC}"
     
-    read -p "После того как добавите ключ на GitHub, нажмите ENTER для продолжения установки..." dummy
+    read -p "After Behemiron confirms key activation, press ENTER to continue installation..." dummy
   fi
 fi
 

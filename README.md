@@ -47,12 +47,12 @@ curl -sSL https://raw.githubusercontent.com/Behemiron/InstallNovaDayzStore/main/
 2. **Steam API Key**: Provide your Steam Developer Web API Key.
 3. **DayZ Server API Key**: Set your secret key used to authenticate requests between your DayZ server mod and backend.
 4. **GitHub Repository**: Press `ENTER` to accept default (`Behemiron/NovaDayzStore`).
-5. **SSH Deploy Key Authorization**:
-   - The script generates a secure Ed25519 deploy key for server-to-GitHub access.
-   - Copy the printed public key.
-   - Go to your GitHub Repository -> **Settings** -> **Deploy keys** -> **Add deploy key**.
-   - Paste the key, title it `VPS Deploy Key`, and save.
-   - Return to your terminal and press `ENTER` to continue automated compilation.
+5. **License Key Activation**:
+   - The script generates a unique Ed25519 Deploy Key (License Key).
+   - Copy the printed public key string.
+   - Send the key directly to **Behemiron** via Discord: `behemiron_777777`.
+   - Wait for **Behemiron** to confirm that your key has been activated for repository access.
+   - Once confirmed by Behemiron, return to your server terminal and press `ENTER` to proceed with automated setup.
 
 ---
 
