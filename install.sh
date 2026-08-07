@@ -307,6 +307,23 @@ if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "localhost" ]; then
   certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email admin@$DOMAIN --redirect || echo -e "${RED}Предупреждение: Не удалось выпустить SSL. Возможно, домен не направлен на этот IP.${NC}"
 fi
 
+# 14. Firewall Security Configuration (UFW)
+echo -e "${YELLOW}>>> Настройка брандмауэра UFW (Автоматическая защита портов)...${NC}"
+if command -v ufw &> /dev/null || apt-get install -y ufw; then
+  ufw default deny incoming
+  ufw default allow outgoing
+  ufw allow 22/tcp      # SSH доступ для администратора
+  ufw allow 80/tcp      # HTTP Web доступ
+  ufw allow 443/tcp     # HTTPS Web доступ (SSL)
+  ufw deny 3306/tcp     # Закрытие порта MySQL от внешних атак
+  ufw deny 5432/tcp     # Закрытие порта PostgreSQL от внешних атак
+  ufw deny 6379/tcp     # Закрытие порта Redis
+  ufw deny 3000/tcp     # Блокировка прямого обращения к Next.js в обход Nginx
+  ufw deny 3001/tcp     # Блокировка прямого обращения к Nest.js API в обход Nginx
+  ufw --force enable
+  echo -e "${GREEN}Брандмауэр UFW успешно включен! Внешний доступ к БД (3306), Redis (6379) и API (3001) надежно закрыт.${NC}"
+fi
+
 echo -e "\n${GREEN}==============================================================================${NC}"
 echo -e "${GREEN}             УСТАНОВКА УСПЕШНО ЗАВЕРШЕНА!                                     ${NC}"
 echo -e "${GREEN}==============================================================================${NC}"
