@@ -3,7 +3,8 @@
 #                 NOVADAYZ SHOP - Ubuntu Auto-Installer Script
 # ==============================================================================
 # OS Support: Ubuntu 20.04 / 22.04 / 24.04 (LTS)
-# Runs as: root (will configure and run applications under novadayz system user)
+# Lead Architect & Developer: Behemiron (Discord: behemiron_777777)
+# Runs as: root (configures isolated unprivileged system user per project)
 # ==============================================================================
 
 set -e
@@ -42,6 +43,25 @@ fi
 
 # 2. Interactive user inputs
 echo -e "\n${YELLOW}>>> Настройка конфигурации проекта...${NC}"
+
+read -p "Введите уникальное имя проекта/владельца (например, yavol, dayz_pvp) [по умолчанию: shop]: " INPUT_PROJECT_NAME
+INPUT_PROJECT_NAME=$(echo "$INPUT_PROJECT_NAME" | tr -cd 'a-zA-Z0-9_' | tr '[:upper:]' '[:lower:]')
+INPUT_PROJECT_NAME=${INPUT_PROJECT_NAME:-shop}
+
+# Dynamically derived secure names for isolation
+SYS_USER="${INPUT_PROJECT_NAME}_novadayz"
+SYS_HOME="/home/${SYS_USER}"
+APP_DIR="/var/www/${SYS_USER}"
+DB_NAME="${INPUT_PROJECT_NAME}_db"
+DB_USER="${SYS_USER}"
+PM2_BACKEND="${INPUT_PROJECT_NAME}-backend"
+PM2_FRONTEND="${INPUT_PROJECT_NAME}-frontend"
+NGINX_CONF="${SYS_USER}"
+
+echo -e "${GREEN}Изолированный пользователь Linux: ${SYS_USER}${NC}"
+echo -e "${GREEN}Директория установки проекта:     ${APP_DIR}${NC}"
+echo -e "${GREEN}База данных MySQL:                ${DB_NAME}${NC}"
+
 read -p "Введите имя домена (например, novadayz.ru) или оставьте пустым для IP: " DOMAIN
 DOMAIN=$(echo "$DOMAIN" | tr -d '\r')
 
@@ -68,10 +88,10 @@ GIT_REPO=${GIT_REPO:-Behemiron/NovaDayzStore}
 USE_SSH="true"
 GIT_TOKEN=""
 
-# 3. Create non-privileged system user "novadayz"
-if ! id "novadayz" &>/dev/null; then
-  echo -e "${YELLOW}>>> Создание системного пользователя novadayz...${NC}"
-  useradd -r -m -U -d /home/novadayz -s /bin/bash novadayz
+# 3. Create non-privileged isolated system user
+if ! id "$SYS_USER" &>/dev/null; then
+  echo -e "${YELLOW}>>> Создание изолированного системного пользователя ${SYS_USER}...${NC}"
+  useradd -r -m -U -d "$SYS_HOME" -s /bin/bash "$SYS_USER"
 fi
 
 if [ -n "$GIT_REPO" ]; then
@@ -81,19 +101,19 @@ if [ -n "$GIT_REPO" ]; then
     read -p "Введите ваш GitHub Personal Access Token (PAT): " GIT_TOKEN
   else
     USE_SSH="true"
-    # Ensure novadayz SSH directory exists
-    mkdir -p /home/novadayz/.ssh
-    chmod 700 /home/novadayz/.ssh
+    # Ensure project user SSH directory exists
+    mkdir -p "${SYS_HOME}/.ssh"
+    chmod 700 "${SYS_HOME}/.ssh"
     
     # Generate SSH Key if it does not exist
-    SSH_KEY_FILE="/home/novadayz/.ssh/id_ed25519_novadayz"
+    SSH_KEY_FILE="${SYS_HOME}/.ssh/id_ed25519_${INPUT_PROJECT_NAME}"
     if [ ! -f "$SSH_KEY_FILE" ]; then
-      echo -e "${YELLOW}>>> Генерация SSH Deploy Key...${NC}"
+      echo -e "${YELLOW}>>> Генерация уникального SSH Deploy Key (${SSH_KEY_FILE})...${NC}"
       ssh-keygen -t ed25519 -f "$SSH_KEY_FILE" -N "" -q
       chmod 600 "$SSH_KEY_FILE"
       chmod 644 "${SSH_KEY_FILE}.pub"
     fi
-    chown -R novadayz:novadayz /home/novadayz/.ssh
+    chown -R "${SYS_USER}:${SYS_USER}" "${SYS_HOME}/.ssh"
     
     echo -e "\n${GREEN}==============================================================================${NC}"
     echo -e "${GREEN}  YOUR LICENSE DEPLOY KEY (COPY THE PUBLIC KEY BELOW):                        ${NC}"
@@ -121,10 +141,10 @@ apt-get update -y
 apt-get upgrade -y
 apt-get install -y curl git build-essential openssl nginx certbot python3-certbot-nginx sudo redis-server
 
-# Configure sudoers for passwordless Nginx/Certbot reload by novadayz user
-echo -e "${YELLOW}>>> Настройка прав sudo для пользователя novadayz...${NC}"
-echo "novadayz ALL=(ALL) NOPASSWD: /usr/sbin/nginx, /usr/bin/systemctl reload nginx, /usr/bin/certbot" > /etc/sudoers.d/novadayz
-chmod 440 /etc/sudoers.d/novadayz
+# Configure sudoers for passwordless Nginx/Certbot reload by isolated system user
+echo -e "${YELLOW}>>> Настройка прав sudo для пользователя ${SYS_USER}...${NC}"
+echo "${SYS_USER} ALL=(ALL) NOPASSWD: /usr/sbin/nginx, /usr/bin/systemctl reload nginx, /usr/bin/certbot" > "/etc/sudoers.d/${SYS_USER}"
+chmod 440 "/etc/sudoers.d/${SYS_USER}"
 
 # 4. Install Node.js 20 LTS
 if ! command -v node &> /dev/null; then
@@ -155,39 +175,41 @@ if ! command -v mysql &> /dev/null; then
 fi
 
 # Configure MySQL Database & User
-echo -e "${YELLOW}>>> Настройка базы данных MySQL...${NC}"
-mysql -e "CREATE DATABASE IF NOT EXISTS novadayz CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -e "CREATE USER IF NOT EXISTS 'novadayz'@'localhost' IDENTIFIED BY '${DB_PASS}';"
-mysql -e "GRANT ALL PRIVILEGES ON novadayz.* TO 'novadayz'@'localhost';"
+echo -e "${YELLOW}>>> Настройка базы данных MySQL (${DB_NAME})...${NC}"
+mysql -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -e "CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';"
+mysql -e "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';"
 mysql -e "FLUSH PRIVILEGES;"
 
 # 7. Setup Directory Structure
-APP_DIR="/var/www/novadayz"
-echo -e "${YELLOW}>>> Подготовка директорий в $APP_DIR...${NC}"
+echo -e "${YELLOW}>>> Подготовка изолированной директории в ${APP_DIR}...${NC}"
 
 # Fresh installation - clone from GitHub repo
-echo -e "Клонирование репозитория с GitHub..."
-rm -rf $APP_DIR
-mkdir -p $APP_DIR
-chown novadayz:novadayz $APP_DIR
+rm -rf "$APP_DIR"
+mkdir -p "$APP_DIR"
+chown "${SYS_USER}:${SYS_USER}" "$APP_DIR"
 
 if [ "$USE_SSH" = "true" ]; then
-  sudo -u novadayz GIT_SSH_COMMAND="ssh -i /home/novadayz/.ssh/id_ed25519_novadayz -o StrictHostKeyChecking=no" git clone git@github.com:${GIT_REPO}.git $APP_DIR
-  cd $APP_DIR
-  sudo -u novadayz git config core.sshCommand "ssh -i /home/novadayz/.ssh/id_ed25519_novadayz -o StrictHostKeyChecking=no"
+  sudo -u "$SYS_USER" GIT_SSH_COMMAND="ssh -i ${SSH_KEY_FILE} -o StrictHostKeyChecking=no" git clone "git@github.com:${GIT_REPO}.git" "$APP_DIR"
+  cd "$APP_DIR"
+  sudo -u "$SYS_USER" git config core.sshCommand "ssh -i ${SSH_KEY_FILE} -o StrictHostKeyChecking=no"
 else
-  sudo -u novadayz git clone https://${GIT_TOKEN}@github.com/${GIT_REPO}.git $APP_DIR
+  sudo -u "$SYS_USER" git clone "https://${GIT_TOKEN}@github.com/${GIT_REPO}.git" "$APP_DIR"
 fi
 
 # 8. Generate Configuration files
 echo -e "${YELLOW}>>> Генерация конфигурационных файлов .env...${NC}"
 
 # Backend config
-cat > $APP_DIR/backend/.env << ENVEOF
+cat > "$APP_DIR/backend/.env" << ENVEOF
 NODE_ENV=production
 PORT=3001
+APP_DIR=${APP_DIR}
+SYSTEM_USER=${SYS_USER}
+PM2_BACKEND_NAME=${PM2_BACKEND}
+PM2_FRONTEND_NAME=${PM2_FRONTEND}
 FRONTEND_URL=http://${DOMAIN:-localhost}
-DATABASE_URL=mysql://novadayz:${DB_PASS}@localhost:3306/novadayz
+DATABASE_URL=mysql://${DB_USER}:${DB_PASS}@localhost:3306/${DB_NAME}
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=${JWT_SECRET}
 JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
@@ -198,31 +220,31 @@ DAYZ_SERVER_API_KEY=${DAYZ_KEY}
 ENVEOF
 
 # Frontend config
-cat > $APP_DIR/frontend/.env.local << ENVEOF
+cat > "$APP_DIR/frontend/.env.local" << ENVEOF
 NEXT_PUBLIC_BACKEND_URL=http://${DOMAIN:-localhost}/api
 NEXT_PUBLIC_API_URL=http://${DOMAIN:-localhost}/api
 ENVEOF
 
 # Write DB credentials so the updater can read it if needed
-cat > $APP_DIR/.db_creds << CREDSEOF
-DB_USER=novadayz
+cat > "$APP_DIR/.db_creds" << CREDSEOF
+DB_USER=${DB_USER}
 DB_PASS=${DB_PASS}
-DB_NAME=novadayz
+DB_NAME=${DB_NAME}
 CREDSEOF
 
-# Set ownership of all files to novadayz user
-chown -R novadayz:novadayz $APP_DIR
+# Set ownership of all files to project system user
+chown -R "${SYS_USER}:${SYS_USER}" "$APP_DIR"
 
 # 9. Build Backend
 echo -e "${YELLOW}>>> Сборка бэкенда...${NC}"
-cd $APP_DIR/backend
-sudo -u novadayz npm install --production=false
-sudo -u novadayz npx prisma generate
-sudo -u novadayz npx prisma db push --accept-data-loss
-sudo -u novadayz npm run build
+cd "$APP_DIR/backend"
+sudo -u "$SYS_USER" npm install --production=false
+sudo -u "$SYS_USER" npx prisma generate
+sudo -u "$SYS_USER" npx prisma db push --accept-data-loss
+sudo -u "$SYS_USER" npm run build
 
 # Save default settings values to DB for domain and github
-mysql -u novadayz -p${DB_PASS} novadayz -e "
+mysql -u "$DB_USER" -p"${DB_PASS}" "${DB_NAME}" -e "
 INSERT INTO SystemSetting (\`key\`, \`value\`) VALUES
 ('system.domain', '${DOMAIN}'),
 ('system.ssl_mode', 'http'),
@@ -232,13 +254,13 @@ ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`);"
 
 # 10. Build Frontend
 echo -e "${YELLOW}>>> Сборка фронтенда...${NC}"
-cd $APP_DIR/frontend
-sudo -u novadayz npm install --production=false
-sudo -u novadayz NEXT_PUBLIC_BACKEND_URL="http://${DOMAIN:-localhost}/api" npm run build
+cd "$APP_DIR/frontend"
+sudo -u "$SYS_USER" npm install --production=false
+sudo -u "$SYS_USER" NEXT_PUBLIC_BACKEND_URL="http://${DOMAIN:-localhost}/api" npm run build
 
 # 11. Configure Nginx Virtual Host
 echo -e "${YELLOW}>>> Настройка веб-сервера Nginx...${NC}"
-cat > /etc/nginx/sites-available/novadayz << NGINXEOF
+cat > "/etc/nginx/sites-available/${NGINX_CONF}" << NGINXEOF
 server {
     listen 80;
     server_name ${DOMAIN:-_};
@@ -276,30 +298,30 @@ server {
 }
 NGINXEOF
 
-# Enable Nginx configs and assign ownership to novadayz user
-touch /etc/nginx/sites-available/novadayz
-chown novadayz:novadayz /etc/nginx/sites-available/novadayz
+# Enable Nginx configs and assign ownership to system user
+touch "/etc/nginx/sites-available/${NGINX_CONF}"
+chown "${SYS_USER}:${SYS_USER}" "/etc/nginx/sites-available/${NGINX_CONF}"
 mkdir -p /etc/nginx/ssl
-chown -R novadayz:novadayz /etc/nginx/ssl
+chown -R "${SYS_USER}:${SYS_USER}" /etc/nginx/ssl
 
-ln -sf /etc/nginx/sites-available/novadayz /etc/nginx/sites-enabled/
+ln -sf "/etc/nginx/sites-available/${NGINX_CONF}" /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default || true
 nginx -t
 systemctl reload nginx
 
-# 12. Run Services with PM2 under novadayz user
-echo -e "${YELLOW}>>> Запуск приложений под PM2...${NC}"
-sudo -u novadayz pm2 delete novadayz-backend 2>/dev/null || true
-sudo -u novadayz pm2 delete novadayz-frontend 2>/dev/null || true
+# 12. Run Services with PM2 under isolated user
+echo -e "${YELLOW}>>> Запуск приложений под PM2 (пользователь ${SYS_USER})...${NC}"
+sudo -u "$SYS_USER" pm2 delete "$PM2_BACKEND" 2>/dev/null || true
+sudo -u "$SYS_USER" pm2 delete "$PM2_FRONTEND" 2>/dev/null || true
 
-cd $APP_DIR/backend
-sudo -u novadayz pm2 start dist/main.js --name novadayz-backend --env production
+cd "$APP_DIR/backend"
+sudo -u "$SYS_USER" pm2 start dist/main.js --name "$PM2_BACKEND" --env production
 
-cd $APP_DIR/frontend
-sudo -u novadayz pm2 start npm --name novadayz-frontend -- start -- -p 3000
+cd "$APP_DIR/frontend"
+sudo -u "$SYS_USER" pm2 start npm --name "$PM2_FRONTEND" -- start -- -p 3000
 
-sudo -u novadayz pm2 save
-env PATH=$PATH:/usr/bin pm2 startup systemd -u novadayz --hp /home/novadayz || true
+sudo -u "$SYS_USER" pm2 save
+env PATH=$PATH:/usr/bin pm2 startup systemd -u "$SYS_USER" --hp "$SYS_HOME" || true
 
 # 13. Let's Encrypt SSL automation
 if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "localhost" ]; then
@@ -327,11 +349,12 @@ fi
 echo -e "\n${GREEN}==============================================================================${NC}"
 echo -e "${GREEN}             УСТАНОВКА УСПЕШНО ЗАВЕРШЕНА!                                     ${NC}"
 echo -e "${GREEN}==============================================================================${NC}"
+echo -e "  Проект / Пользователь:   ${SYS_USER}"
+echo -e "  Директория установки:    ${APP_DIR}"
 echo -e "  Сайт доступен по адресу: http://${DOMAIN:-Ваш_IP_Сервера}"
 echo -e "  Бэкенд API:              http://${DOMAIN:-Ваш_IP_Сервера}/api"
-echo -e "  Пароль к базе данных:    ${DB_PASS} (Сохранен в $APP_DIR/.db_creds)"
+echo -e "  Пароль к базе данных:    ${DB_PASS} (Сохранен в ${APP_DIR}/.db_creds)"
 echo -e "${GREEN}==============================================================================${NC}"
 
 # Самоудаление скрипта после успешного завершения
 rm -- "$0" 2>/dev/null || true
-

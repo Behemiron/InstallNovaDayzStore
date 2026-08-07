@@ -45,8 +45,10 @@ curl -sSL https://raw.githubusercontent.com/Behemiron/InstallNovaDayzStore/main/
 
 During installation, the script will prompt you for configuration parameters. Below is the complete step-by-step breakdown:
 
-### Step 1: System User Creation
-- The script automatically checks for the `novadayz` system user. If it does not exist, it creates the isolated user account `/home/novadayz` with restricted permissions.
+### Step 1: Unique Project & System User Name
+- **Prompt**: `Введите уникальное имя проекта/владельца (например, yavol, dayz_pvp) [по умолчанию: shop]:`
+- **Action**: Enter your custom project identifier (e.g., `yavol`).
+- **Security Hardening**: The installer dynamically generates a unique isolated Linux system user `${name}_novadayz` (e.g., `yavol_novadayz`), isolates its home directory `/home/yavol_novadayz`, installs application code in `/var/www/yavol_novadayz`, and provisions a dedicated database `${name}_db`. This completely eliminates predictable path vectors across target servers.
 
 ### Step 2: Domain Configuration
 - **Prompt**: `Введите имя домена (например, novadayz.ru) или оставьте пустым для IP:`
