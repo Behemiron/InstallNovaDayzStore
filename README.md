@@ -36,6 +36,11 @@ Before executing the installer:
 Connect to your VPS via SSH as `root` and run:
 
 ```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Behemiron/InstallNovaDayzStore/main/install.sh)"
+```
+
+Alternatively:
+```bash
 curl -sSL https://raw.githubusercontent.com/Behemiron/InstallNovaDayzStore/main/install.sh | sudo bash
 ```
 

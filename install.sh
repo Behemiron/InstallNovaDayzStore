@@ -31,7 +31,7 @@ if [ -f /etc/os-release ]; then
   . /etc/os-release
   if [ "$ID" != "ubuntu" ]; then
     echo -e "${YELLOW}Предупреждение: Этот скрипт официально поддерживает только Ubuntu.${NC}"
-    read -p "Вы действительно хотите продолжить? (y/N): " confirm
+    read -p "Вы действительно хотите продолжить? (y/N): " confirm < /dev/tty || true
     if [[ ! $confirm =~ ^[Yy]$ ]]; then
       exit 1
     fi
@@ -44,7 +44,7 @@ fi
 # 2. Interactive user inputs
 echo -e "\n${YELLOW}>>> Настройка конфигурации проекта...${NC}"
 
-read -p "Введите уникальное имя проекта/владельца (например, yavol, dayz_pvp) [по умолчанию: shop]: " INPUT_PROJECT_NAME
+read -p "Введите уникальное имя проекта/владельца (например, yavol, dayz_pvp) [по умолчанию: shop]: " INPUT_PROJECT_NAME < /dev/tty || true
 INPUT_PROJECT_NAME=$(echo "$INPUT_PROJECT_NAME" | tr -cd 'a-zA-Z0-9_' | tr '[:upper:]' '[:lower:]')
 INPUT_PROJECT_NAME=${INPUT_PROJECT_NAME:-shop}
 
@@ -62,7 +62,7 @@ echo -e "${GREEN}Изолированный пользователь Linux: ${SY
 echo -e "${GREEN}Директория установки проекта:     ${APP_DIR}${NC}"
 echo -e "${GREEN}База данных MySQL:                ${DB_NAME}${NC}"
 
-read -p "Введите имя домена (например, novadayz.ru) или оставьте пустым для IP: " DOMAIN
+read -p "Введите имя домена (например, novadayz.ru) или оставьте пустым для IP: " DOMAIN < /dev/tty || true
 DOMAIN=$(echo "$DOMAIN" | tr -d '\r')
 
 if [ -z "$DOMAIN" ]; then
@@ -75,13 +75,13 @@ if [ -z "$DOMAIN" ]; then
   echo -e "${GREEN}Используется IP-адрес: $DOMAIN${NC}"
 fi
 
-read -p "Введите ваш Steam Web API Key (можно получить на https://steamcommunity.com/dev/apikey): " STEAM_KEY
+read -p "Введите ваш Steam Web API Key (можно получить на https://steamcommunity.com/dev/apikey): " STEAM_KEY < /dev/tty || true
 STEAM_KEY=$(echo "$STEAM_KEY" | tr -d '\r')
 
-read -p "Введите секретный ключ для мода DayZ (DayZ Server API Key): " DAYZ_KEY
+read -p "Введите секретный ключ для мода DayZ (DayZ Server API Key): " DAYZ_KEY < /dev/tty || true
 DAYZ_KEY=$(echo "$DAYZ_KEY" | tr -d '\r')
 
-read -p "Репозиторий GitHub (по умолчанию Behemiron/NovaDayzStore): " GIT_REPO
+read -p "Репозиторий GitHub (по умолчанию Behemiron/NovaDayzStore): " GIT_REPO < /dev/tty || true
 GIT_REPO=$(echo "$GIT_REPO" | tr -d '\r')
 GIT_REPO=${GIT_REPO:-Behemiron/NovaDayzStore}
 
@@ -95,10 +95,10 @@ if ! id "$SYS_USER" &>/dev/null; then
 fi
 
 if [ -n "$GIT_REPO" ]; then
-  read -p "Использовать SSH Deploy Key для авторизации в GitHub? (Рекомендуется) (Y/n): " auth_choice
+  read -p "Использовать SSH Deploy Key для авторизации в GitHub? (Рекомендуется) (Y/n): " auth_choice < /dev/tty || true
   if [[ "$auth_choice" =~ ^[Nn]$ ]]; then
     USE_SSH="false"
-    read -p "Введите ваш GitHub Personal Access Token (PAT): " GIT_TOKEN
+    read -p "Введите ваш GitHub Personal Access Token (PAT): " GIT_TOKEN < /dev/tty || true
   else
     USE_SSH="true"
     # Ensure project user SSH directory exists
@@ -127,7 +127,7 @@ if [ -n "$GIT_REPO" ]; then
     echo -e "  4. Once confirmed by Behemiron, press ENTER below to proceed with installation."
     echo -e "${GREEN}==============================================================================${NC}"
     
-    read -p "After Behemiron confirms key activation, press ENTER to continue installation..." dummy
+    read -p "After Behemiron confirms key activation, press ENTER to continue installation..." dummy < /dev/tty || true
   fi
 fi
 
