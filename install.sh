@@ -188,8 +188,11 @@ echo -e "${YELLOW}>>> Подготовка изолированной дирек
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
 chown "${SYS_USER}:${SYS_USER}" "$APP_DIR"
+git config --system --add safe.directory "$APP_DIR" || true
+git config --global --add safe.directory "$APP_DIR" || true
 
 if [ "$USE_SSH" = "true" ]; then
+  sudo -u "$SYS_USER" git config --global --add safe.directory "$APP_DIR" || true
   sudo -u "$SYS_USER" GIT_SSH_COMMAND="ssh -i ${SSH_KEY_FILE} -o StrictHostKeyChecking=no" git clone "git@github.com:${GIT_REPO}.git" "$APP_DIR"
   cd "$APP_DIR"
   sudo -u "$SYS_USER" git config core.sshCommand "ssh -i ${SSH_KEY_FILE} -o StrictHostKeyChecking=no"
