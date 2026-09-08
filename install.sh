@@ -81,9 +81,12 @@ STEAM_KEY=$(echo "$STEAM_KEY" | tr -d '\r')
 read -p "Введите секретный ключ для мода DayZ (DayZ Server API Key): " DAYZ_KEY < /dev/tty || true
 DAYZ_KEY=$(echo "$DAYZ_KEY" | tr -d '\r')
 
-read -p "Репозиторий GitHub (по умолчанию Behemiron/NovaDayzStore): " GIT_REPO < /dev/tty || true
+read -p "Репозиторий GitHub (по умолчанию Behemiron/NovaDayZStore): " GIT_REPO < /dev/tty || true
 GIT_REPO=$(echo "$GIT_REPO" | tr -d '\r')
-GIT_REPO=${GIT_REPO:-Behemiron/NovaDayzStore}
+# Sanitize and extract owner/repo: strip https://github.com/, git@github.com:, .git, slashes
+GIT_REPO=$(echo "$GIT_REPO" | sed -e 's|^https://github.com/||i' -e 's|^http://github.com/||i' -e 's|^git@github.com:||i' -e 's|\.git$||i' -e 's|^/||' -e 's|/$||' | xargs)
+GIT_REPO=${GIT_REPO:-Behemiron/NovaDayZStore}
+echo -e "${GREEN}Выбран репозиторий: ${GIT_REPO}${NC}"
 
 USE_SSH="true"
 GIT_TOKEN=""
@@ -116,18 +119,24 @@ if [ -n "$GIT_REPO" ]; then
     chown -R "${SYS_USER}:${SYS_USER}" "${SYS_HOME}/.ssh"
     
     echo -e "\n${GREEN}==============================================================================${NC}"
-    echo -e "${GREEN}  YOUR LICENSE DEPLOY KEY (COPY THE PUBLIC KEY BELOW):                        ${NC}"
+    echo -e "${GREEN}  YOUR SSH DEPLOY KEY (COPY THE PUBLIC KEY BELOW):                            ${NC}"
     echo -e "${GREEN}==============================================================================${NC}"
     cat "${SSH_KEY_FILE}.pub"
     echo -e "${GREEN}==============================================================================${NC}"
-    echo -e "  LICENSE ACTIVATION INSTRUCTIONS:"
-    echo -e "  1. Copy the full public key string above."
-    echo -e "  2. Send this key directly to Behemiron via Discord: behemiron_777777"
-    echo -e "  3. Wait for Behemiron to confirm that your license key has been added to repository."
-    echo -e "  4. Once confirmed by Behemiron, press ENTER below to proceed with installation."
+    echo -e "  ИНСТРУКЦИЯ ПО АКТИВАЦИИ КЛЮЧА:"
+    echo -e "  1. Скопируйте публичный ключ, выведенный выше."
+    if [ "$GIT_REPO" = "Behemiron/NovaDayZStore" ]; then
+      echo -e "  2. Отправьте этот ключ Behemiron в Discord: behemiron_777777 для привязки лицензии."
+      echo -e "  3. Дождитесь подтверждения от Behemiron."
+      echo -e "  4. После подтверждения нажмите ENTER для продолжения установки..."
+    else
+      echo -e "  2. Добавьте этот ключ в ваш репозиторий GitHub: https://github.com/${GIT_REPO}/settings/keys"
+      echo -e "     (Settings -> Deploy keys -> Add deploy key, без флага Allow write access)."
+      echo -e "  3. После добавления ключа в репозиторий нажмите ENTER для продолжения установки..."
+    fi
     echo -e "${GREEN}==============================================================================${NC}"
     
-    read -p "After Behemiron confirms key activation, press ENTER to continue installation..." dummy < /dev/tty || true
+    read -p "Нажмите ENTER для продолжения установки..." dummy < /dev/tty || true
   fi
 fi
 
@@ -198,6 +207,17 @@ if [ "$USE_SSH" = "true" ]; then
   sudo -u "$SYS_USER" git config core.sshCommand "ssh -i ${SSH_KEY_FILE} -o StrictHostKeyChecking=no"
 else
   sudo -u "$SYS_USER" git clone "https://${GIT_TOKEN}@github.com/${GIT_REPO}.git" "$APP_DIR"
+fi
+
+# Ensure project deploy key is copied to $APP_DIR/.ssh/id_ed25519 for system auto-updater
+if [ -f "$SSH_KEY_FILE" ]; then
+  mkdir -p "$APP_DIR/.ssh"
+  cp "$SSH_KEY_FILE" "$APP_DIR/.ssh/id_ed25519"
+  cp "${SSH_KEY_FILE}.pub" "$APP_DIR/.ssh/id_ed25519.pub"
+  chmod 700 "$APP_DIR/.ssh"
+  chmod 600 "$APP_DIR/.ssh/id_ed25519"
+  chmod 644 "$APP_DIR/.ssh/id_ed25519.pub"
+  chown -R "${SYS_USER}:${SYS_USER}" "$APP_DIR/.ssh"
 fi
 
 # 8. Generate Configuration files
