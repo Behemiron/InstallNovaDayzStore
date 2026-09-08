@@ -124,19 +124,13 @@ if [ -n "$GIT_REPO" ]; then
     cat "${SSH_KEY_FILE}.pub"
     echo -e "${GREEN}==============================================================================${NC}"
     echo -e "  ИНСТРУКЦИЯ ПО АКТИВАЦИИ КЛЮЧА:"
-    echo -e "  1. Скопируйте публичный ключ, выведенный выше."
-    if [ "$GIT_REPO" = "Behemiron/NovaDayZStore" ]; then
-      echo -e "  2. Отправьте этот ключ Behemiron в Discord: behemiron_777777 для привязки лицензии."
-      echo -e "  3. Дождитесь подтверждения от Behemiron."
-      echo -e "  4. После подтверждения нажмите ENTER для продолжения установки..."
-    else
-      echo -e "  2. Добавьте этот ключ в ваш репозиторий GitHub: https://github.com/${GIT_REPO}/settings/keys"
-      echo -e "     (Settings -> Deploy keys -> Add deploy key, без флага Allow write access)."
-      echo -e "  3. После добавления ключа в репозиторий нажмите ENTER для продолжения установки..."
-    fi
+    echo -e "  1. Скопируйте весь публичный ключ, выведенный выше."
+    echo -e "  2. Отправьте этот ключ Behemiron в Discord: behemiron_777777 для привязки лицензии."
+    echo -e "  3. Дождитесь подтверждения от Behemiron, что ключ добавлен в репозиторий."
+    echo -e "  4. После подтверждения нажмите ENTER для продолжения установки..."
     echo -e "${GREEN}==============================================================================${NC}"
     
-    read -p "Нажмите ENTER для продолжения установки..." dummy < /dev/tty || true
+    read -p "После подтверждения от Behemiron нажмите ENTER для продолжения установки..." dummy < /dev/tty || true
   fi
 fi
 
