@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-#                 NOVADAYZ SHOP - Ubuntu Auto-Installer Script
+#                 BEHEMIRON STORE - Ubuntu Auto-Installer Script
 # ==============================================================================
 # OS Support: Ubuntu 20.04 / 22.04 / 24.04 (LTS)
 # Lead Architect & Developer: Behemiron (Discord: behemiron_777777)
@@ -17,7 +17,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}==============================================================================${NC}"
-echo -e "${BLUE}                   NOVADAYZ SHOP AUTO-INSTALLER SCRIPT                        ${NC}"
+echo -e "${BLUE}                   BEHEMIRON STORE AUTO-INSTALLER SCRIPT                      ${NC}"
 echo -e "${BLUE}==============================================================================${NC}"
 
 # 1. Root & OS check
@@ -49,7 +49,12 @@ INPUT_PROJECT_NAME=$(echo "$INPUT_PROJECT_NAME" | tr -cd 'a-zA-Z0-9_' | tr '[:up
 INPUT_PROJECT_NAME=${INPUT_PROJECT_NAME:-shop}
 
 # Dynamically derived secure names for isolation
-SYS_USER="${INPUT_PROJECT_NAME}_novadayz"
+# Check if legacy directory exists to preserve existing installations if re-run
+if [ -d "/var/www/${INPUT_PROJECT_NAME}_novadayz" ] && [ ! -d "/var/www/${INPUT_PROJECT_NAME}_behemiron" ]; then
+  SYS_USER="${INPUT_PROJECT_NAME}_novadayz"
+else
+  SYS_USER="${INPUT_PROJECT_NAME}_behemiron"
+fi
 SYS_HOME="/home/${SYS_USER}"
 APP_DIR="/var/www/${SYS_USER}"
 DB_NAME="${INPUT_PROJECT_NAME}_db"
@@ -62,7 +67,7 @@ echo -e "${GREEN}Изолированный пользователь Linux: ${SY
 echo -e "${GREEN}Директория установки проекта:     ${APP_DIR}${NC}"
 echo -e "${GREEN}База данных MySQL:                ${DB_NAME}${NC}"
 
-read -p "Введите имя домена (например, novadayz.ru) или оставьте пустым для IP: " DOMAIN < /dev/tty || true
+read -p "Введите имя домена (например, myshop.ru) или оставьте пустым для IP: " DOMAIN < /dev/tty || true
 DOMAIN=$(echo "$DOMAIN" | tr -d '\r')
 
 if [ -z "$DOMAIN" ]; then
@@ -78,10 +83,10 @@ fi
 read -p "Введите ваш Steam Web API Key (можно получить на https://steamcommunity.com/dev/apikey): " STEAM_KEY < /dev/tty || true
 STEAM_KEY=$(echo "$STEAM_KEY" | tr -d '\r')
 
-read -p "Введите секретный ключ для мода DayZ (DayZ Server API Key): " DAYZ_KEY < /dev/tty || true
+read -p "Введите секретный ключ для мода сервера (Server API Key): " DAYZ_KEY < /dev/tty || true
 DAYZ_KEY=$(echo "$DAYZ_KEY" | tr -d '\r')
 
-read -p "Репозиторий GitHub (по умолчанию Behemiron/NovaDayZStore): " GIT_REPO < /dev/tty || true
+read -p "Репозиторий GitHub (например, Behemiron/NovaDayZStore или Behemiron/PaPaDayz) [по умолчанию: Behemiron/NovaDayZStore]: " GIT_REPO < /dev/tty || true
 GIT_REPO=$(echo "$GIT_REPO" | tr -d '\r')
 # Sanitize and extract owner/repo: strip https://github.com/, git@github.com:, .git, slashes
 GIT_REPO=$(echo "$GIT_REPO" | sed -e 's|^https://github.com/||i' -e 's|^http://github.com/||i' -e 's|^git@github.com:||i' -e 's|\.git$||i' -e 's|^/||' -e 's|/$||' | xargs)
@@ -119,18 +124,18 @@ if [ -n "$GIT_REPO" ]; then
     chown -R "${SYS_USER}:${SYS_USER}" "${SYS_HOME}/.ssh"
     
     echo -e "\n${GREEN}==============================================================================${NC}"
-    echo -e "${GREEN}  YOUR SSH DEPLOY KEY (COPY THE PUBLIC KEY BELOW):                            ${NC}"
+    echo -e "${GREEN}  YOUR SSH DEPLOY KEY (СКОПИРУЙТЕ ПУБЛИЧНЫЙ КЛЮЧ НИЖЕ):                      ${NC}"
     echo -e "${GREEN}==============================================================================${NC}"
     cat "${SSH_KEY_FILE}.pub"
     echo -e "${GREEN}==============================================================================${NC}"
-    echo -e "  ИНСТРУКЦИЯ ПО АКТИВАЦИИ КЛЮЧА:"
-    echo -e "  1. Скопируйте весь публичный ключ, выведенный выше."
-    echo -e "  2. Отправьте этот ключ Behemiron в Discord: behemiron_777777 для привязки лицензии."
-    echo -e "  3. Дождитесь подтверждения от Behemiron, что ключ добавлен в репозиторий."
-    echo -e "  4. После подтверждения нажмите ENTER для продолжения установки..."
+    echo -e "  ИНСТРУКЦИЯ ПО АКТИВАЦИИ:"
+    echo -e "  1. Скопируйте публичный SSH-ключ, выведенный выше."
+    echo -e "  2. Привяжите его в личном кабинете на https://behemiron.tech в поле «Привязать Deploy Key»"
+    echo -e "     (или отправьте Behemiron в Discord: behemiron_777777)."
+    echo -e "  3. Нажмите ENTER для продолжения установки..."
     echo -e "${GREEN}==============================================================================${NC}"
     
-    read -p "После подтверждения от Behemiron нажмите ENTER для продолжения установки..." dummy < /dev/tty || true
+    read -p "После привязки ключа нажмите ENTER для продолжения установки..." dummy < /dev/tty || true
   fi
 fi
 
