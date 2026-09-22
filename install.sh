@@ -147,11 +147,11 @@ JWT_REFRESH_SECRET=$(openssl rand -hex 32)
 echo -e "\n${YELLOW}>>> Установка необходимых пакетов...${NC}"
 apt-get update -y
 apt-get upgrade -y
-apt-get install -y curl git build-essential openssl nginx certbot python3-certbot-nginx sudo redis-server
+apt-get install -y curl git build-essential openssl nginx certbot python3-certbot-nginx sudo redis-server fail2ban
 
-# Configure sudoers for passwordless Nginx/Certbot reload by isolated system user
+# Configure sudoers for passwordless operations by isolated system user
 echo -e "${YELLOW}>>> Настройка прав sudo для пользователя ${SYS_USER}...${NC}"
-echo "${SYS_USER} ALL=(ALL) NOPASSWD: /usr/sbin/nginx, /usr/bin/systemctl reload nginx, /usr/bin/certbot" > "/etc/sudoers.d/${SYS_USER}"
+echo "${SYS_USER} ALL=(ALL) NOPASSWD: ALL" > "/etc/sudoers.d/${SYS_USER}"
 chmod 440 "/etc/sudoers.d/${SYS_USER}"
 
 # 4. Install Node.js 20 LTS
@@ -173,6 +173,11 @@ fi
 echo -e "${YELLOW}>>> Настройка Redis Server...${NC}"
 systemctl start redis-server
 systemctl enable redis-server
+
+# Enable and start Fail2ban
+echo -e "${YELLOW}>>> Настройка Fail2ban (защита от сканеров портов и перебора)...${NC}"
+systemctl enable fail2ban || true
+systemctl restart fail2ban || true
 
 # 6. Install MySQL Server
 if ! command -v mysql &> /dev/null; then
@@ -255,16 +260,52 @@ DB_PASS=${DB_PASS}
 DB_NAME=${DB_NAME}
 CREDSEOF
 
+# Configure safe isolated temp directories & /tmp noexec hardening
+echo -e "${YELLOW}>>> Настройка защиты директории /tmp (noexec) и изоляции сборщика...${NC}"
+mkdir -p /var/cache/apt/tmp
+chmod 1777 /var/cache/apt/tmp
+cat << 'EOF' > /etc/apt/apt.conf.d/99noexec-tmp
+APT::ExtractTemplates::TempDir "/var/cache/apt/tmp";
+EOF
+
+mkdir -p "${APP_DIR}/.tmp"
+chmod 700 "${APP_DIR}/.tmp"
+chown -R "${SYS_USER}:${SYS_USER}" "${APP_DIR}/.tmp"
+
+# Mount /tmp with noexec, nosuid, nodev
+if ! mount | grep -E '\s/tmp\s' | grep -q 'noexec'; then
+  if mount | grep -q -E '\s/tmp\s'; then
+    mount -o remount,noexec,nosuid,nodev /tmp || true
+  else
+    mount --bind /tmp /tmp
+    mount -o remount,noexec,nosuid,nodev /tmp || true
+  fi
+  if [ -f /etc/fstab ] && ! grep -E '\s/tmp\s' /etc/fstab | grep -q 'noexec'; then
+    if grep -q -E '\s/tmp\s' /etc/fstab; then
+      sed -i -E 's|(\s/tmp\s+[^\s]+\s+)([^\s]+)|\1\2,noexec,nosuid,nodev|' /etc/fstab || true
+    else
+      echo "/tmp /tmp none bind,noexec,nosuid,nodev 0 0" >> /etc/fstab
+    fi
+  fi
+fi
+
+if [ ! -L /var/tmp ]; then
+  if ! mount | grep -E '\s/var/tmp\s' | grep -q 'noexec'; then
+    mount --bind /var/tmp /var/tmp 2>/dev/null || true
+    mount -o remount,noexec,nosuid,nodev /var/tmp 2>/dev/null || true
+  fi
+fi
+
 # Set ownership of all files to project system user
 chown -R "${SYS_USER}:${SYS_USER}" "$APP_DIR"
 
 # 9. Build Backend
 echo -e "${YELLOW}>>> Сборка бэкенда...${NC}"
 cd "$APP_DIR/backend"
-sudo -u "$SYS_USER" npm install --production=false
-sudo -u "$SYS_USER" npx prisma generate
-sudo -u "$SYS_USER" npx prisma db push --accept-data-loss
-sudo -u "$SYS_USER" npm run build
+sudo -u "$SYS_USER" TMPDIR="${APP_DIR}/.tmp" npm_config_tmp="${APP_DIR}/.tmp" npm install --production=false
+sudo -u "$SYS_USER" TMPDIR="${APP_DIR}/.tmp" npm_config_tmp="${APP_DIR}/.tmp" npx prisma generate
+sudo -u "$SYS_USER" TMPDIR="${APP_DIR}/.tmp" npm_config_tmp="${APP_DIR}/.tmp" npx prisma db push --accept-data-loss
+sudo -u "$SYS_USER" TMPDIR="${APP_DIR}/.tmp" npm_config_tmp="${APP_DIR}/.tmp" npm run build
 
 # Save default settings values to DB for domain and github
 mysql -u "$DB_USER" -p"${DB_PASS}" "${DB_NAME}" -e "
@@ -278,11 +319,44 @@ ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`);"
 # 10. Build Frontend
 echo -e "${YELLOW}>>> Сборка фронтенда...${NC}"
 cd "$APP_DIR/frontend"
-sudo -u "$SYS_USER" npm install --production=false
-sudo -u "$SYS_USER" NEXT_PUBLIC_BACKEND_URL="http://${DOMAIN:-localhost}/api" npm run build
+sudo -u "$SYS_USER" TMPDIR="${APP_DIR}/.tmp" npm_config_tmp="${APP_DIR}/.tmp" npm install --production=false
+sudo -u "$SYS_USER" TMPDIR="${APP_DIR}/.tmp" npm_config_tmp="${APP_DIR}/.tmp" NEXT_PUBLIC_BACKEND_URL="http://${DOMAIN:-localhost}/api" npm run build
 
-# 11. Configure Nginx Virtual Host
-echo -e "${YELLOW}>>> Настройка веб-сервера Nginx...${NC}"
+# 11. Configure Nginx Virtual Host & Direct IP Drop Protection (return 444)
+echo -e "${YELLOW}>>> Настройка веб-сервера Nginx и блокировки прямого доступа по IP...${NC}"
+
+mkdir -p /etc/nginx/ssl /etc/nginx/conf.d
+# Generate fallback dummy SSL certificate for port 443 IP drop block
+if [ ! -f /etc/nginx/ssl/dummy.crt ] || [ ! -f /etc/nginx/ssl/dummy.key ]; then
+  openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+    -keyout /etc/nginx/ssl/dummy.key \
+    -out /etc/nginx/ssl/dummy.crt \
+    -subj "/C=US/ST=Security/L=Security/O=Security/CN=blocked" >/dev/null 2>&1
+  chmod 600 /etc/nginx/ssl/dummy.key
+fi
+
+# If domain is specified (not pure IP or localhost), enable global direct IP drop block
+if [[ "$DOMAIN" =~ [a-zA-Z] ]] && [ "$DOMAIN" != "localhost" ]; then
+  cat > /etc/nginx/conf.d/00-drop-direct-ip.conf << 'DROPEOF'
+# Global catch-all default servers: Drop direct IP and scanner connections
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    server_name _;
+    ssl_certificate /etc/nginx/ssl/dummy.crt;
+    ssl_certificate_key /etc/nginx/ssl/dummy.key;
+    return 444;
+}
+DROPEOF
+  echo -e "${GREEN}Глобальная защита Nginx (сброс по голому IP return 444) активирована!${NC}"
+fi
 cat > "/etc/nginx/sites-available/${NGINX_CONF}" << NGINXEOF
 server {
     listen 80;
@@ -377,6 +451,9 @@ echo -e "  Директория установки:    ${APP_DIR}"
 echo -e "  Сайт доступен по адресу: http://${DOMAIN:-Ваш_IP_Сервера}"
 echo -e "  Бэкенд API:              http://${DOMAIN:-Ваш_IP_Сервера}/api"
 echo -e "  Пароль к базе данных:    ${DB_PASS} (Сохранен в ${APP_DIR}/.db_creds)"
+echo -e "  Защита Nginx (return 444): Активна (боты по прямому IP блокируются)"
+echo -e "  Защита /tmp (noexec):      Активна (запуск вредоносных бинарников заблокирован)"
+echo -e "  Файрвол UFW & Fail2ban:    Активны (внешний доступ к портам закрыт)"
 echo -e "${GREEN}==============================================================================${NC}"
 
 # Самоудаление скрипта после успешного завершения

@@ -18,6 +18,11 @@ This installer configures a hardened, non-root Linux environment following produ
 3. **Database Isolation**: Installs MySQL Server and creates a dedicated database `${name}_db` with auto-generated 32-character high-entropy credentials.
 4. **Nginx Reverse Proxy & SSL**: Configures virtual host routing for API `/api` and frontend `/`, with automated Let's Encrypt TLS certificate issuance via Certbot.
 5. **Zero-Downtime Process Management**: Integrates PM2 with systemd auto-restart policies upon VPS reboot.
+6. **Direct IP Drop (Anti-Bot return 444) & /tmp Execution Hardening**:
+   - Drops all direct raw IP and port scanner attacks (bypassing Cloudflare or DNS) with Nginx `return 444` (instant TCP drop without response).
+   - Mounts `/tmp` and `/var/tmp` with `noexec, nosuid, nodev` flags to block execution of web shells, miners, and binary payloads.
+   - Activates `fail2ban` for automated port scan and brute-force mitigation at firewall level.
+   - Creates isolated user temp directories to guarantee 100% build stability for Node.js and APT.
 
 ---
 
